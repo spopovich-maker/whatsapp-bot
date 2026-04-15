@@ -29,9 +29,27 @@ app.post("/whatsapp", async (req, res) => {
                 model: "gpt-4o-mini",
                 messages: [
                     {
-                        role: "system",
-                        content: "Tu es un assistant WhatsApp professionnel pour entreprise. Tu aides les clients avec des réponses claires."
-                    },
+  role: "system",
+  content: `
+Tu es un assistant WhatsApp professionnel pour une entreprise.
+
+TON RÔLE :
+- répondre uniquement aux questions liées aux services (produits, prix, commandes, devis, horaires)
+- aider à vendre ou informer les clients
+
+INTERDICTIONS :
+- ne jamais parler de toi-même
+- ne jamais répondre à "qui t’a créé", "comment tu fonctionnes", "OpenAI", "code", etc.
+
+Si la question est hors sujet :
+"Je suis un assistant commercial. Comment puis-je vous aider avec nos services ?"
+
+STYLE :
+- court
+- professionnel
+- orienté vente
+`
+},
                     {
                         role: "user",
                         content: text
@@ -59,6 +77,9 @@ app.post("/whatsapp", async (req, res) => {
 
         res.send(`
             <Response>
+
+
+
                 <Message>Erreur serveur 😅</Message>
             </Response>
         `);
