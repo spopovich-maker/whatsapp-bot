@@ -67,9 +67,9 @@ function truncate(text, maxChars = 400) {
 
 function detectQuickCommand(text) {
     const t = text.toLowerCase().trim();
-    if (/(bonjour|salut|hello|bonsoir|hey|slt|bjr|bsr|yo|ya)/.test(t)) return "greeting";
-    if (/(prix|tarif|combien|coût|menu|services|produits|voir|liste|avez.vous|proposez)/.test(t)) return "prices";
-    if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|emplacement|situé|trouver vous|vous êtes)/.test(t)) return "location";
+    if (/(bonjour|salut|hello|bonsoir|hey|yo|slt|bsr|bjr|cc|coucou)/.test(t)) return "greeting";
+    if (/(prix|tarif|combien|menu|service|produit|voir|liste|manger|plat|commande)/.test(t)) return "prices";
+    if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|situé|trouver)/.test(t)) return "location";
     if (/(promo|réduction|offre|promotion|remise|solde)/.test(t)) return "promo";
     return null;
 }
@@ -227,9 +227,9 @@ app.post("/whatsapp", async (req, res) => {
     const menuImages = client.menuImages || [];
 
     if (menuImages.length > 0) {
-        let mediaXml = menuImages.map(url => `<Media>${url}</Media>`).join("");
         res.set("Content-Type", "text/xml");
-        return res.send(`<Response><Message>📋 Voici notre ${label} 😋</Message>${mediaXml}</Response>`);
+        const mediaXml = menuImages.map(url => `<Media>${url}</Media>`).join("");
+        return res.send(`<Response><Message>📋 Voici notre ${label} 😋\n${mediaXml}</Message></Response>`);
     } else {
         const list = items.length
             ? items.map(i => `• ${i}`).join("\n")
