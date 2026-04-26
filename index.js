@@ -1,5 +1,5 @@
 // ============================================================
-// WHATSAPP BOT — CODE FINAL AVEC FIREBASE INTÉGRÉ
+// WHATSAPP BOT — CODE FINAL CORRIGÉ
 // Projet Firebase : bot-whatsapp-cd585
 // ============================================================
 
@@ -10,21 +10,22 @@ const admin = require("firebase-admin");
 
 // ============================================================
 // 🔐 CONFIGURATION
-// Remplace uniquement les valeurs marquées *** CHANGER ***
 // ============================================================
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-// Firebase — utilise ta NOUVELLE clé après avoir révoqué l'ancienne
+
+// ⚠️ IMPORTANT : Remplace les valeurs Firebase par ta NOUVELLE clé
+// (celle générée après avoir révoqué l'ancienne)
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert({
             type: "service_account",
             project_id: "bot-whatsapp-cd585",
-            private_key_id: "c895aeba2a8c7cdc8a486ab13d7568c29785fe7d",   // *** CHANGER après révocation ***
-            private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDHo9jHL0mUPVyr\nB0Pr/yPU6CPUWRtjDZJ+NQDkrpwuIeUQqQ+2vD/61gpRAYeoj3ZCQF9dm0ITI9B5\nxIP/+q7ztGq3Iy2J4k9rATgZMbPVcP/r8NSo/7cCRcEkEw4D7dcP6iBgCBcMyAc7\nNreaYzC64iOJPNw77u1P5J7XuC9sYJXaM0XBA5j6IR/f2jy4x5CslGrZ1HV46K9s\njhq2U+pvIxEGjz4K8h1p8+xfjsT4gVzxeENlorfklcBZvkJ1th42Sjti3EyQnXgt\n8wq6o/iugtEjqjzrrIr4j3XTFIcDN6Mk/2ceY/rglFaPnm8rjEvgx9umhht4nGGw\nHWK27Gd/AgMBAAECggEAFLvtGz7LhwRad/7QrJV6jLWxZu/8Oqzhro7lsVp7KQVn\nK3RLiACEKpKJTsF4a+a+cwIJhYjG84LwN31T8kWAXxo5TRzvsVbaRbRCNcemNEBA\nrCn+hDDOuoMxHISIG5tbjzETPLYKYs7xhVJY/kVX/cjXxPyXqPfXGMmXP7NG5Zvx\nPI9fIhN9yqrJ+qXwb+2aNRXz6/ObtbnaawWr4cOy7lTXoZ2cDOyIR3BSYHcfx5OT\nBz1rV3bDL7sOTmYoEq3viTbV4D4Fwo71/1koc7KQOZE1hNeTKU/2/mdc7wSIq1HN\nCbV6+GUhHhsutI1p1U3/hNrxhqC56rzqIlPWEJGzuQKBgQD3tvm9Ry95jbFbLCXH\nqP/Jw5ijbdTjaa+ifUuAHHDPht+7I8t6flhiFt+Y8xlsTxBR6YlBdaUzpcb0oXX3\n9vHdHsU+jfaxWqyyHiGsA38ZuD8gh9K/DAyTGu6tivMK3jX8z1WogQ0/qerCg8w3\nmEkQm0czz9m4wwVMzIsc08hgxwKBgQDOUTzkXJ5wF+vhKDopWwBIV3XKBUgA4wcF\nt8yaSKm0BV0eiuo3CGnFGsDCzFQ9RgDYYDV4Cm1PWHfgCBNkW+aamcWGX12yzwJp\nQ3iKQXVS8yBZ21g3MA0t6vdxx9v9y6mR5IJliZIGVTXMss9c6jUAmortjE6Gf2Yd\n40C3pUd7iQKBgEz3qnNYSfT/xKqqdfaqmQeM4cFt3+blMLBRNANTUu34X03bWl7u\nIPIhX0o7xptzmYOKB56yOilpCf96p5frP81PwUOlgpAqt1wEpru2vmg0alDmQuIf\nkUyn4p9DfC7VSnsJxPi9WGt+lTXpE6v2gkVJqf78Rw70cZIiP9suJqWDAoGAAtIZ\ngwXBJMcu8mUaZnZYCqUndxubYGe6MNnSckmMCGoKW+CKUzZKO+ehuwgQHsZWPJ8U\nHBAIbo1HFkkF+tlGzdZMXQnwvgEWh1nky/8ZG4k3aAMXsal2hKoxt9yDpXSjXNtC\n7SB0XqHLmoDXVO3ey6NRQu4oJK6ZNs9kkx4vXAECgYEAk8RsWAh4qD//UoHyz2t4\neTqtu7mtx/l4sBkCdzWZagXvA6TdxuhXetvzVmylksoh1Lu03EpJdymdQ90P7rWw\nD8KLxkxnCrcEcXf631PaNdMwmpQmSfdb747K/Y0hm+tdNvqqnaJPwxf2gacb+EIV\nuPRYl1FZA2V2iu2ZKfAvSRE=\n-----END PRIVATE KEY-----\n",          // *** CHANGER après révocation ***
+            private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,   // ← mets dans Render
+            private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"), // ← mets dans Render
             client_email: "firebase-adminsdk-fbsvc@bot-whatsapp-cd585.iam.gserviceaccount.com",
-            client_id: "105603007657199749921",               // *** CHANGER après révocation ***
+            client_id: process.env.FIREBASE_CLIENT_ID,              // ← mets dans Render
             auth_uri: "https://accounts.google.com/o/oauth2/auth",
             token_uri: "https://oauth2.googleapis.com/token",
         }),
@@ -60,6 +61,13 @@ function twimlResponse(res, message) {
     return res.send(`<Response><Message>${escapeXml(message)}</Message></Response>`);
 }
 
+// Réponse avec images (format TwiML correct pour WhatsApp)
+function twimlResponseWithMedia(res, message, imageUrls) {
+    res.set("Content-Type", "text/xml");
+    const mediaXml = imageUrls.map(url => `<Media>${url}</Media>`).join("");
+    return res.send(`<Response><Message><Body>${escapeXml(message)}</Body>${mediaXml}</Message></Response>`);
+}
+
 function truncate(text, maxChars = 400) {
     if (!text) return "";
     return text.length > maxChars ? text.substring(0, maxChars) + "…" : text;
@@ -67,12 +75,13 @@ function truncate(text, maxChars = 400) {
 
 function detectQuickCommand(text) {
     const t = text.toLowerCase().trim();
-    if (/(bonjour|salut|hello|bonsoir|hey|yo|slt|bsr|bjr|cc|coucou)/.test(t)) return "greeting";
-    if (/(prix|tarif|combien|menu|service|produit|voir|liste|manger|plat|commande)/.test(t)) return "prices";
-    if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|situé|trouver)/.test(t)) return "location";
+    if (/(bonjour|salut|hello|bonsoir|hey|yo|slt|bsr|bjr|cc|coucou|allo|allô)/.test(t)) return "greeting";
+    if (/(prix|tarif|combien|menu|service|produit|voir|liste|manger|plat|commande|carte)/.test(t)) return "prices";
+    if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|situé|trouver|emplacement)/.test(t)) return "location";
     if (/(promo|réduction|offre|promotion|remise|solde)/.test(t)) return "promo";
     return null;
 }
+
 // ============================================================
 // HISTORIQUE DE CONVERSATION
 // ============================================================
@@ -109,7 +118,7 @@ async function incrementUsage(clientNumber) {
     try {
         const ref = db.collection("clients").doc(clientNumber);
         await ref.set({
-            "usage": {
+            usage: {
                 totalMessages: admin.firestore.FieldValue.increment(1),
                 lastMessageAt: new Date(),
             }
@@ -124,24 +133,6 @@ async function incrementUsage(clientNumber) {
 // ============================================================
 
 app.post("/whatsapp", async (req, res) => {
-
-    // ----------------------------------------------------------
-    // 🔐 VÉRIFICATION SIGNATURE TWILIO
-    // ----------------------------------------------------------
-    //const twilioSignature = req.headers["x-twilio-signature"];
-   // const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
-
-   //  const isValid = twilio.validateRequest(
-      //   TWILIO_AUTH_TOKEN,
-        // twilioSignature,
-        // url,
-        // req.body
-    // );
-
-   // if (!isValid) {
-    //    console.warn("⚠️ Requête non autorisée — signature Twilio invalide");
-      //  return res.status(403).send("Forbidden");
-//    }
 
     // ----------------------------------------------------------
     // LECTURE DES DONNÉES ENTRANTES
@@ -194,6 +185,7 @@ app.post("/whatsapp", async (req, res) => {
         const promoMessage = client.promo?.message;
         const locationText = client.location?.text;
         const locationLink = client.location?.link;
+        const menuImages = client.menuImages || [];
         const type = client.type || "entreprise";
 
         let label = "services";
@@ -206,14 +198,35 @@ app.post("/whatsapp", async (req, res) => {
         // COMMANDES RAPIDES (sans OpenAI)
         // ----------------------------------------------------------
         const quickCmd = detectQuickCommand(text);
+        console.log("COMMANDE DÉTECTÉE:", quickCmd);
 
         if (quickCmd === "greeting") {
             await incrementUsage(cleanNumber);
             const promoLine = promoActive ? `\n\n🎉 Promo : ${promoMessage}` : "";
             return twimlResponse(
                 res,
-                `👋 Bonjour et bienvenue chez *${client.name}* !\n\nComment puis-je vous aider ?\n• Voir nos ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
+                `👋 Bonjour et bienvenue chez *${client.name}* !\n\nComment puis-je vous aider ?\n• Voir notre ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
             );
+        }
+
+        if (quickCmd === "prices") {
+            await incrementUsage(cleanNumber);
+            console.log("IMAGES MENU:", menuImages.length, "image(s) trouvée(s)");
+
+            if (menuImages.length > 0) {
+                // ✅ Format TwiML correct pour envoyer des images sur WhatsApp
+                return twimlResponseWithMedia(
+                    res,
+                    `📋 Voici notre ${label} 😋\n\nSouhaitez-vous passer commande ?`,
+                    menuImages
+                );
+            } else {
+                // Fallback texte si pas d'images
+                const list = items.length
+                    ? items.map(i => `• ${i}`).join("\n")
+                    : "Non disponible";
+                return twimlResponse(res, `📋 Notre ${label} :\n\n${list}\n\nSouhaitez-vous commander ?`);
+            }
         }
 
         if (quickCmd === "location") {
@@ -222,21 +235,7 @@ app.post("/whatsapp", async (req, res) => {
             const link = locationLink ? `\n📍 ${locationLink}` : "";
             return twimlResponse(res, `📍 Notre adresse :\n${loc}${link}`);
         }
-        if (quickCmd === "prices") {
-    await incrementUsage(cleanNumber);
-    const menuImages = client.menuImages || [];
 
-    if (menuImages.length > 0) {
-        res.set("Content-Type", "text/xml");
-        const mediaXml = menuImages.map(url => `<Media>${url}</Media>`).join("");
-        return res.send(`<Response><Message>📋 Voici notre ${label} 😋\n${mediaXml}</Message></Response>`);
-    } else {
-        const list = items.length
-            ? items.map(i => `• ${i}`).join("\n")
-            : "Non disponible";
-        return twimlResponse(res, `📋 Nos ${label} :\n\n${list}`);
-    }
-}
         if (quickCmd === "promo") {
             await incrementUsage(cleanNumber);
             if (promoActive && promoMessage) {
@@ -247,14 +246,11 @@ app.post("/whatsapp", async (req, res) => {
         }
 
         // ----------------------------------------------------------
-        // HISTORIQUE DE CONVERSATION
+        // HISTORIQUE + APPEL OPENAI (messages non reconnus)
         // ----------------------------------------------------------
         const history = await getHistory(cleanNumber);
         history.push({ role: "user", content: truncate(text) });
 
-        // ----------------------------------------------------------
-        // APPEL OPENAI
-        // ----------------------------------------------------------
         const systemPrompt = `
 Tu es un assistant WhatsApp professionnel pour l'entreprise suivante.
 
@@ -282,7 +278,7 @@ ${locationLink || ""}
 - Si promo active → la mentionner naturellement
 - Si localisation demandée → donner texte ET lien
 - Toujours proposer une action claire à la fin
-- Si le client exprime son envie de commander dire de facon polie qu une personne va bientot prendre sa comande
+- Si le client veut commander → dire poliment qu'une personne va prendre sa commande bientôt
 
 =========================
 STYLE
@@ -291,7 +287,6 @@ STYLE
 - Messages courts et clairs (WhatsApp)
 - Emojis avec modération
 - Répondre en français sauf si le client écrit dans une autre langue
-
 `;
 
         const response = await axios.post(
@@ -324,16 +319,17 @@ STYLE
         return twimlResponse(res, reply);
 
     } catch (error) {
+        console.error("=== ERREUR DÉTAILLÉE ===");
         if (error.response) {
             const status = error.response.status;
-            console.error("Erreur OpenAI:", status, error.response.data);
+            console.error("Erreur OpenAI:", status, JSON.stringify(error.response.data));
             if (status === 429) return twimlResponse(res, "⚠️ Service surchargé. Réessayez dans quelques secondes.");
             if (status === 401) return twimlResponse(res, "⚠️ Erreur de configuration. Contactez le support.");
         } else if (error.code === "ECONNABORTED") {
             console.error("Timeout OpenAI");
             return twimlResponse(res, "⚠️ Réponse trop longue. Réessayez svp.");
         } else {
-            console.error("Erreur inconnue:", error.message);
+            console.error("Erreur inconnue:", error.message, error.stack);
         }
         return twimlResponse(res, "😅 Une erreur est survenue. Réessayez dans un moment.");
     }
