@@ -15,17 +15,15 @@ const admin = require("firebase-admin");
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
-// ⚠️ IMPORTANT : Remplace les valeurs Firebase par ta NOUVELLE clé
-// (celle générée après avoir révoqué l'ancienne)
 if (!admin.apps.length) {
     admin.initializeApp({
         credential: admin.credential.cert({
             type: "service_account",
             project_id: "bot-whatsapp-cd585",
-            private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,   // ← mets dans Render
-            private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"), // ← mets dans Render
+            private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+            private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
             client_email: "firebase-adminsdk-fbsvc@bot-whatsapp-cd585.iam.gserviceaccount.com",
-            client_id: process.env.FIREBASE_CLIENT_ID,              // ← mets dans Render
+            client_id: process.env.FIREBASE_CLIENT_ID,
             auth_uri: "https://accounts.google.com/o/oauth2/auth",
             token_uri: "https://oauth2.googleapis.com/token",
         }),
@@ -43,31 +41,27 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // ============================================================
-// UTILITAIRES
+// UTILITAIRES — utilise la librairie Twilio (plus fiable que XML manuel)
 // ============================================================
 
-function escapeXml(unsafe) {
-    if (!unsafe) return "";
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&apos;");
+// Réponse texte simple
+function sendText(res, message) {
+    const twiml = new twilio.twiml.MessagingResponse();
+    twiml.message(message);
+    console.log("TWIML ENVOYÉ:", twiml.toString());
+    res.set("Content-Type", "text/xml");
+    return res.send(twiml.toString());
 }
 
-function twimlResponse(res, message) {
+// Réponse avec image(s)
+function sendMedia(res, message, imageUrls) {
+    const twiml = new twilio.twiml.MessagingResponse();
+    const msg = twiml.message();
+    msg.body(message);
+    imageUrls.forEach(url => msg.media(url));
+    console.log("TWIML MEDIA ENVOYÉ:", twiml.toString());
     res.set("Content-Type", "text/xml");
-    return res.send(`<Response><Message>${escapeXml(message)}</Message></Response>`);
-}
-
-// Réponse avec images (format TwiML correct pour WhatsApp)
-function twimlResponseWithMedia(res, message, imageUrls) {
-    res.set("Content-Type", "text/xml");
-    const mediaXml = imageUrls.map(url => `<Media>${url}</Media>`).join("");
-    const xml = `<Response><Message>${mediaXml}</Message></Response>`;
-    console.log("XML ENVOYÉ:", xml);
-    return res.send(xml);
+    return res.send(twiml.toString());
 }
 
 function truncate(text, maxChars = 400) {
@@ -136,9 +130,6 @@ async function incrementUsage(clientNumber) {
 
 app.post("/whatsapp", async (req, res) => {
 
-    // ----------------------------------------------------------
-    // LECTURE DES DONNÉES ENTRANTES
-    // ----------------------------------------------------------
     const userMessage = req.body.Body;
     const fromNumber = req.body.From;
     const text = userMessage?.trim();
@@ -147,41 +138,29 @@ app.post("/whatsapp", async (req, res) => {
     console.log("NUMÉRO:", fromNumber);
 
     if (!text || text.length < 2) {
-        return twimlResponse(res, "⚠️ Message trop court, pouvez-vous préciser votre demande ?");
+        return sendText(res, "⚠️ Message trop court, pouvez-vous préciser votre demande ?");
     }
 
     if (text.length > 600) {
-        return twimlResponse(res, "⚠️ Message trop long. Pouvez-vous le résumer en quelques mots ?");
+        return sendText(res, "⚠️ Message trop long. Pouvez-vous le résumer en quelques mots ?");
     }
 
     try {
-        // ----------------------------------------------------------
-        // NORMALISATION DU NUMÉRO + LECTURE FIREBASE
-        // ----------------------------------------------------------
         const cleanNumber = fromNumber.replace("whatsapp:", "");
         const snapshot = await db.collection("clients").doc(cleanNumber).get();
 
         console.log("cleanNumber:", cleanNumber, "| exists:", snapshot.exists);
 
         if (!snapshot.exists) {
-            return twimlResponse(
-                res,
-                "⚠️ Ce numéro n'est pas enregistré dans notre système. Contactez-nous pour activer votre compte."
-            );
+            return sendText(res, "⚠️ Ce numéro n'est pas enregistré dans notre système. Contactez-nous pour activer votre compte.");
         }
 
         const client = snapshot.data();
 
         if (client.active === false) {
-            return twimlResponse(
-                res,
-                "⚠️ Votre abonnement est inactif. Contactez le support pour réactiver votre service."
-            );
+            return sendText(res, "⚠️ Votre abonnement est inactif. Contactez le support pour réactiver votre service.");
         }
 
-        // ----------------------------------------------------------
-        // EXTRACTION DONNÉES CLIENT
-        // ----------------------------------------------------------
         const items = client.items || [];
         const promoActive = client.promo?.active;
         const promoMessage = client.promo?.message;
@@ -196,18 +175,18 @@ app.post("/whatsapp", async (req, res) => {
 
         console.log("CLIENT TROUVÉ:", client.name);
 
-        // ----------------------------------------------------------
-        // COMMANDES RAPIDES (sans OpenAI)
-        // ----------------------------------------------------------
         const quickCmd = detectQuickCommand(text);
         console.log("COMMANDE DÉTECTÉE:", quickCmd);
+
+        // ----------------------------------------------------------
+        // COMMANDES RAPIDES
+        // ----------------------------------------------------------
 
         if (quickCmd === "greeting") {
             await incrementUsage(cleanNumber);
             const promoLine = promoActive ? `\n\n🎉 Promo : ${promoMessage}` : "";
-            return twimlResponse(
-                res,
-                `👋 Bonjour et bienvenue chez *${client.name}* !\n\nComment puis-je vous aider ?\n• Voir notre ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
+            return sendText(res,
+                `👋 Bonjour et bienvenue chez ${client.name} !\n\nComment puis-je vous aider ?\n• Voir notre ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
             );
         }
 
@@ -216,18 +195,15 @@ app.post("/whatsapp", async (req, res) => {
             console.log("IMAGES MENU:", menuImages.length, "image(s) trouvée(s)");
 
             if (menuImages.length > 0) {
-                // ✅ Format TwiML correct pour envoyer des images sur WhatsApp
-                return twimlResponseWithMedia(
-                    res,
-                    `📋 Voici notre ${label} 😋\n\nSouhaitez-vous passer commande ?`,
+                return sendMedia(res,
+                    `Voici notre ${label} 😋\n\nSouhaitez-vous passer commande ?`,
                     menuImages
                 );
             } else {
-                // Fallback texte si pas d'images
                 const list = items.length
                     ? items.map(i => `• ${i}`).join("\n")
                     : "Non disponible";
-                return twimlResponse(res, `📋 Notre ${label} :\n\n${list}\n\nSouhaitez-vous commander ?`);
+                return sendText(res, `📋 Notre ${label} :\n\n${list}\n\nSouhaitez-vous commander ?`);
             }
         }
 
@@ -235,20 +211,20 @@ app.post("/whatsapp", async (req, res) => {
             await incrementUsage(cleanNumber);
             const loc = locationText || "Non disponible";
             const link = locationLink ? `\n📍 ${locationLink}` : "";
-            return twimlResponse(res, `📍 Notre adresse :\n${loc}${link}`);
+            return sendText(res, `📍 Notre adresse :\n${loc}${link}`);
         }
 
         if (quickCmd === "promo") {
             await incrementUsage(cleanNumber);
             if (promoActive && promoMessage) {
-                return twimlResponse(res, `🎉 Promotion en cours :\n\n${promoMessage}`);
+                return sendText(res, `🎉 Promotion en cours :\n\n${promoMessage}`);
             } else {
-                return twimlResponse(res, "Aucune promotion active pour le moment. Revenez bientôt ! 😊");
+                return sendText(res, "Aucune promotion active pour le moment. Revenez bientôt ! 😊");
             }
         }
 
         // ----------------------------------------------------------
-        // HISTORIQUE + APPEL OPENAI (messages non reconnus)
+        // OPENAI — messages non reconnus
         // ----------------------------------------------------------
         const history = await getHistory(cleanNumber);
         history.push({ role: "user", content: truncate(text) });
@@ -318,22 +294,22 @@ STYLE
         await saveHistory(cleanNumber, history);
         await incrementUsage(cleanNumber);
 
-        return twimlResponse(res, reply);
+        return sendText(res, reply);
 
     } catch (error) {
         console.error("=== ERREUR DÉTAILLÉE ===");
         if (error.response) {
             const status = error.response.status;
             console.error("Erreur OpenAI:", status, JSON.stringify(error.response.data));
-            if (status === 429) return twimlResponse(res, "⚠️ Service surchargé. Réessayez dans quelques secondes.");
-            if (status === 401) return twimlResponse(res, "⚠️ Erreur de configuration. Contactez le support.");
+            if (status === 429) return sendText(res, "⚠️ Service surchargé. Réessayez dans quelques secondes.");
+            if (status === 401) return sendText(res, "⚠️ Erreur de configuration. Contactez le support.");
         } else if (error.code === "ECONNABORTED") {
             console.error("Timeout OpenAI");
-            return twimlResponse(res, "⚠️ Réponse trop longue. Réessayez svp.");
+            return sendText(res, "⚠️ Réponse trop longue. Réessayez svp.");
         } else {
             console.error("Erreur inconnue:", error.message, error.stack);
         }
-        return twimlResponse(res, "😅 Une erreur est survenue. Réessayez dans un moment.");
+        return sendText(res, "😅 Une erreur est survenue. Réessayez dans un moment.");
     }
 });
 
