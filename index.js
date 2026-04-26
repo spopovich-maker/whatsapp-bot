@@ -13,7 +13,7 @@ const admin = require("firebase-admin");
 // Remplace uniquement les valeurs marquées *** CHANGER ***
 // ============================================================
 
-const OPENAI_API_KEY = "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";           // *** CHANGER ***
+const OPENAI_API_KEY = "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";           // *** CHANGER ***
 const TWILIO_AUTH_TOKEN = "a68a79973fd3fa95153d600a6839d72a";     // *** CHANGER ***
 
 // Firebase — utilise ta NOUVELLE clé après avoir révoqué l'ancienne
