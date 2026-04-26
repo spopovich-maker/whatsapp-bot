@@ -128,8 +128,8 @@ app.post("/whatsapp", async (req, res) => {
     // ----------------------------------------------------------
     // 🔐 VÉRIFICATION SIGNATURE TWILIO
     // ----------------------------------------------------------
-    const twilioSignature = req.headers["x-twilio-signature"];
-    const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
+    //const twilioSignature = req.headers["x-twilio-signature"];
+   // const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
    //  const isValid = twilio.validateRequest(
       //   TWILIO_AUTH_TOKEN,
