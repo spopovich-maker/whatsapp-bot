@@ -223,6 +223,13 @@ app.post("/whatsapp", async (req, res) => {
             const link = locationLink ? `\n📍 ${locationLink}` : "";
             return twimlResponse(res, `📍 Notre adresse :\n${loc}${link}`);
         }
+        if (quickCmd === "prices") {
+    await incrementUsage(cleanNumber);
+    const list = items.length 
+        ? items.map(i => `• ${i}`).join("\n") 
+        : "Non disponible";
+    return twimlResponse(res, `📋 Nos ${label} :\n\n${list}`);
+}
 
         if (quickCmd === "promo") {
             await incrementUsage(cleanNumber);
