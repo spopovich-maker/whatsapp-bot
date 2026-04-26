@@ -49,7 +49,7 @@ function sendText(res, message) {
     const twiml = new twilio.twiml.MessagingResponse();
     twiml.message(message);
     console.log("TWIML ENVOYÉ:", twiml.toString());
-    res.set("Content-Type", "text/xml");
+   res.status(200).set("Content-Type", "text/xml");
     return res.send(twiml.toString());
 }
 
@@ -60,7 +60,7 @@ function sendMedia(res, message, imageUrls) {
     msg.body(message);
     imageUrls.forEach(url => msg.media(url));
     console.log("TWIML MEDIA ENVOYÉ:", twiml.toString());
-    res.set("Content-Type", "text/xml");
+   res.status(200).set("Content-Type", "text/xml");
     return res.send(twiml.toString());
 }
 
