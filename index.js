@@ -110,10 +110,12 @@ async function saveHistory(phoneNumber, messages) {
 async function incrementUsage(clientNumber) {
     try {
         const ref = db.collection("clients").doc(clientNumber);
-        await ref.update({
-            "usage.totalMessages": admin.firestore.FieldValue.increment(1),
-            "usage.lastMessageAt": new Date(),
-        });
+        await ref.set({
+            "usage": {
+                totalMessages: admin.firestore.FieldValue.increment(1),
+                lastMessageAt: new Date(),
+            }
+        }, { merge: true });
     } catch (e) {
         console.error("Erreur compteur usage:", e.message);
     }
