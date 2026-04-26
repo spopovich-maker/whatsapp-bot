@@ -138,10 +138,10 @@ app.post("/whatsapp", async (req, res) => {
         // req.body
     // );
 
-    if (!isValid) {
-        console.warn("⚠️ Requête non autorisée — signature Twilio invalide");
-        return res.status(403).send("Forbidden");
-    }
+   // if (!isValid) {
+    //    console.warn("⚠️ Requête non autorisée — signature Twilio invalide");
+      //  return res.status(403).send("Forbidden");
+//    }
 
     // ----------------------------------------------------------
     // LECTURE DES DONNÉES ENTRANTES
