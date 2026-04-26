@@ -68,7 +68,7 @@ function truncate(text, maxChars = 400) {
 
 function detectQuickCommand(text) {
     const t = text.toLowerCase().trim();
-    if (/(bonjour|salut|hello|bonsoir|hey|slt|bjr)/.test(t)) return "greeting";
+    if (/(bonjour|salut|hello|bonsoir|hey|slt|bjr|bsr|yo|ya)/.test(t)) return "greeting";
     if (/(prix|tarif|combien|coût|menu|services|produits|voir|liste|avez.vous|proposez)/.test(t)) return "prices";
     if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|emplacement|situé|trouver vous|vous êtes)/.test(t)) return "location";
     if (/(promo|réduction|offre|promotion|remise|solde)/.test(t)) return "promo";
