@@ -65,7 +65,9 @@ function twimlResponse(res, message) {
 function twimlResponseWithMedia(res, message, imageUrls) {
     res.set("Content-Type", "text/xml");
     const mediaXml = imageUrls.map(url => `<Media>${url}</Media>`).join("");
-    return res.send(`<Response><Message><Body>${escapeXml(message)}</Body>${mediaXml}</Message></Response>`);
+    const xml = `<Response><Message>${mediaXml}</Message></Response>`;
+    console.log("XML ENVOYÉ:", xml);
+    return res.send(xml);
 }
 
 function truncate(text, maxChars = 400) {
