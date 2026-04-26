@@ -131,12 +131,12 @@ app.post("/whatsapp", async (req, res) => {
     const twilioSignature = req.headers["x-twilio-signature"];
     const url = `${req.protocol}://${req.get("host")}${req.originalUrl}`;
 
-    const isValid = twilio.validateRequest(
-        TWILIO_AUTH_TOKEN,
-        twilioSignature,
-        url,
-        req.body
-    );
+   //  const isValid = twilio.validateRequest(
+      //   TWILIO_AUTH_TOKEN,
+        // twilioSignature,
+        // url,
+        // req.body
+    // );
 
     if (!isValid) {
         console.warn("⚠️ Requête non autorisée — signature Twilio invalide");
