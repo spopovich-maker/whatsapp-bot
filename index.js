@@ -224,12 +224,19 @@ app.post("/whatsapp", async (req, res) => {
         }
         if (quickCmd === "prices") {
     await incrementUsage(cleanNumber);
-    const list = items.length 
-        ? items.map(i => `• ${i}`).join("\n") 
-        : "Non disponible";
-    return twimlResponse(res, `📋 Nos ${label} :\n\n${list}`);
-}
+    const menuImages = client.menuImages || [];
 
+    if (menuImages.length > 0) {
+        let mediaXml = menuImages.map(url => `<Media>${url}</Media>`).join("");
+        res.set("Content-Type", "text/xml");
+        return res.send(`<Response><Message>📋 Voici notre ${label} 😋</Message>${mediaXml}</Response>`);
+    } else {
+        const list = items.length
+            ? items.map(i => `• ${i}`).join("\n")
+            : "Non disponible";
+        return twimlResponse(res, `📋 Nos ${label} :\n\n${list}`);
+    }
+}
         if (quickCmd === "promo") {
             await incrementUsage(cleanNumber);
             if (promoActive && promoMessage) {
