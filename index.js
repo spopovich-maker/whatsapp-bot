@@ -269,6 +269,7 @@ ${locationLink || ""}
 - Si promo active → la mentionner naturellement
 - Si localisation demandée → donner texte ET lien
 - Toujours proposer une action claire à la fin
+- Si le client exprime son envie de commander dire de facon polie qu une personne va bientot prendre sa comande
 
 =========================
 STYLE
@@ -277,6 +278,7 @@ STYLE
 - Messages courts et clairs (WhatsApp)
 - Emojis avec modération
 - Répondre en français sauf si le client écrit dans une autre langue
+
 `;
 
         const response = await axios.post(
