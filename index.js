@@ -1,11 +1,14 @@
+require("dotenv").config();
+const axios = require("axios");
+const { MessageMedia } = require("whatsapp-web.js");
 // ============================================================
-// WHATSAPP BOT — CODE FINAL CORRIGÉ
-// Projet Firebase : bot-whatsapp-cd585
+// WHATSAPP BOT — VERSION whatsapp-web.js
+// Multi-sessions : chaque client a son propre numéro WhatsApp
 // ============================================================
 
 const express = require("express");
-const axios = require("axios");
-const twilio = require("twilio");
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const qrcode = require("qrcode");
 const admin = require("firebase-admin");
 
 // ============================================================
@@ -13,7 +16,6 @@ const admin = require("firebase-admin");
 // ============================================================
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
 if (!admin.apps.length) {
     admin.initializeApp({
@@ -32,49 +34,35 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 const app = express();
-
-// ============================================================
-// MIDDLEWARES
-// ============================================================
-
-app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 
 // ============================================================
-// UTILITAIRES — utilise la librairie Twilio (plus fiable que XML manuel)
+// GESTION MULTI-SESSIONS
+// sessions = { clientId: { client, status, qrCode } }
 // ============================================================
 
-// Réponse texte simple
-function sendText(res, message) {
-    const twiml = new twilio.twiml.MessagingResponse();
-    twiml.message(message);
-    console.log("TWIML ENVOYÉ:", twiml.toString());
-   res.status(200).set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
-}
+const sessions = {};
 
-// Réponse avec image(s)
-function sendMedia(res, message, imageUrls) {
-    const twiml = new twilio.twiml.MessagingResponse();
-    const msg = twiml.message();
-    msg.body(message);
-    imageUrls.forEach(url => msg.media(url));
-    console.log("TWIML MEDIA ENVOYÉ:", twiml.toString());
-   res.status(200).set("Content-Type", "text/xml");
-    return res.send(twiml.toString());
-}
+// ============================================================
+// UTILITAIRES
+// ============================================================
 
 function truncate(text, maxChars = 400) {
     if (!text) return "";
     return text.length > maxChars ? text.substring(0, maxChars) + "…" : text;
 }
 
+
 function detectQuickCommand(text) {
     const t = text.toLowerCase().trim();
-    if (/(bonjour|salut|hello|bonsoir|hey|yo|slt|bsr|bjr|cc|coucou|allo|allô)/.test(t)) return "greeting";
+    // Promo en premier car "promo" contient "pro" qui peut confondre
+    if (/(promo|réduction|offre|promotion|remise|solde|rabais)/.test(t)) return "promo";
+    // Ensuite les autres commandes
     if (/(prix|tarif|combien|menu|service|produit|voir|liste|manger|plat|commande|carte)/.test(t)) return "prices";
     if (/(adresse|localisation|où|ou trouver|itinéraire|local|lieu|situé|trouver|emplacement)/.test(t)) return "location";
-    if (/(promo|réduction|offre|promotion|remise|solde)/.test(t)) return "promo";
+    // Greeting en dernier
+    if (/(bonjour|salut|hello|bonsoir|hey|yo|slt|bsr|bjr|cc|coucou|allo|allô)/.test(t)) return "greeting";
     return null;
 }
 
@@ -84,9 +72,9 @@ function detectQuickCommand(text) {
 
 const MAX_HISTORY = 6;
 
-async function getHistory(phoneNumber) {
+async function getHistory(clientId, phoneNumber) {
     try {
-        const ref = db.collection("conversations").doc(phoneNumber);
+        const ref = db.collection("conversations").doc(`${clientId}_${phoneNumber}`);
         const snap = await ref.get();
         if (!snap.exists) return [];
         return snap.data().messages || [];
@@ -96,23 +84,18 @@ async function getHistory(phoneNumber) {
     }
 }
 
-async function saveHistory(phoneNumber, messages) {
+async function saveHistory(clientId, phoneNumber, messages) {
     try {
-        const ref = db.collection("conversations").doc(phoneNumber);
-        const trimmed = messages.slice(-MAX_HISTORY);
-        await ref.set({ messages: trimmed, updatedAt: new Date() });
+        const ref = db.collection("conversations").doc(`${clientId}_${phoneNumber}`);
+        await ref.set({ messages: messages.slice(-MAX_HISTORY), updatedAt: new Date() });
     } catch (e) {
         console.error("Erreur sauvegarde historique:", e.message);
     }
 }
 
-// ============================================================
-// COMPTEUR D'UTILISATION
-// ============================================================
-
-async function incrementUsage(clientNumber) {
+async function incrementUsage(clientId) {
     try {
-        const ref = db.collection("clients").doc(clientNumber);
+        const ref = db.collection("clients").doc(clientId);
         await ref.set({
             usage: {
                 totalMessages: admin.firestore.FieldValue.increment(1),
@@ -125,47 +108,30 @@ async function incrementUsage(clientNumber) {
 }
 
 // ============================================================
-// ROUTE PRINCIPALE WHATSAPP
+// TRAITEMENT DES MESSAGES
 // ============================================================
 
-app.post("/whatsapp", async (req, res) => {
+async function handleMessage(clientId, msg) {
+    const text = msg.body?.trim();
+    const fromNumber = msg.from.replace("@c.us", "");
 
-    const userMessage = req.body.Body;
-    const fromNumber = req.body.From;
-    const text = userMessage?.trim();
+    console.log(`[${clientId}] MESSAGE DE: ${fromNumber} → ${text}`);
 
-    console.log("MESSAGE REÇU:", text);
-    console.log("NUMÉRO:", fromNumber);
-
-    if (!text || text.length < 2) {
-        return sendText(res, "⚠️ Message trop court, pouvez-vous préciser votre demande ?");
-    }
-
-    if (text.length > 600) {
-        return sendText(res, "⚠️ Message trop long. Pouvez-vous le résumer en quelques mots ?");
-    }
+    if (!text || text.length < 2 || text.length > 600) return;
 
     try {
-        const cleanNumber = fromNumber.replace("whatsapp:", "");
-        const snapshot = await db.collection("clients").doc(cleanNumber).get();
-
-        console.log("cleanNumber:", cleanNumber, "| exists:", snapshot.exists);
-
-        if (!snapshot.exists) {
-            return sendText(res, "⚠️ Ce numéro n'est pas enregistré dans notre système. Contactez-nous pour activer votre compte.");
-        }
+        // Lecture du client dans Firebase
+        const snapshot = await db.collection("clients").doc(clientId).get();
+        if (!snapshot.exists) return;
 
         const client = snapshot.data();
-
-        if (client.active === false) {
-            return sendText(res, "⚠️ Votre abonnement est inactif. Contactez le support pour réactiver votre service.");
-        }
+        if (client.active === false) return;
 
         const items = client.items || [];
         const promoActive = client.promo?.active;
         const promoMessage = client.promo?.message;
-        const locationText = client.location?.text;
-        const locationLink = client.location?.link;
+      const locationText = client.location?.text;
+const locationLink = client.location?.link;
         const menuImages = client.menuImages || [];
         const type = client.type || "entreprise";
 
@@ -173,60 +139,66 @@ app.post("/whatsapp", async (req, res) => {
         if (type === "restaurant") label = "menu";
         else if (type === "boutique") label = "produits";
 
-        console.log("CLIENT TROUVÉ:", client.name);
-
         const quickCmd = detectQuickCommand(text);
-        console.log("COMMANDE DÉTECTÉE:", quickCmd);
+        console.log(`[${clientId}] COMMANDE: ${quickCmd}`);
+       console.log(`[${clientId}] LOCATION:`, JSON.stringify(client.location));
+        const whatsappClient = sessions[clientId]?.client;
+        if (!whatsappClient) return;
 
         // ----------------------------------------------------------
         // COMMANDES RAPIDES
         // ----------------------------------------------------------
 
         if (quickCmd === "greeting") {
-            await incrementUsage(cleanNumber);
-            const promoLine = promoActive ? `\n\n🎉 Promo : ${promoMessage}` : "";
-            return sendText(res,
-                `👋 Bonjour et bienvenue chez ${client.name} !\n\nComment puis-je vous aider ?\n• Voir notre ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
-            );
-        }
+    await incrementUsage(clientId);
+    const promoLine = promoActive ? `\n\n🎉 Promo : ${promoMessage}` : "";
+    const horairesLine = client.horaires ? `\n⏰ Horaires : ${client.horaires}` : "";
+    await whatsappClient.sendMessage(msg.from,
+        `👋 Bonjour et bienvenue chez *${client.name}* !${horairesLine}\n\nComment puis-je vous aider ?\n• Voir nos ${label}\n• Infos de localisation\n• Promotions en cours${promoLine}`
+    );
+    return;
+}
 
         if (quickCmd === "prices") {
-            await incrementUsage(cleanNumber);
-            console.log("IMAGES MENU:", menuImages.length, "image(s) trouvée(s)");
-
+            await incrementUsage(clientId);
             if (menuImages.length > 0) {
-                return sendMedia(res,
-                    `Voici notre ${label} 😋\n\nSouhaitez-vous passer commande ?`,
-                    menuImages
-                );
+                await whatsappClient.sendMessage(msg.from, `📋 Voici nos ${label} 😋`);
+                for (const imageUrl of menuImages) {
+                    const media = await MessageMedia.fromUrl(imageUrl);
+                    await whatsappClient.sendMessage(msg.from, media);
+                }
+                await whatsappClient.sendMessage(msg.from, "Souhaitez-vous passer commande ? 😊");
             } else {
                 const list = items.length
                     ? items.map(i => `• ${i}`).join("\n")
                     : "Non disponible";
-                return sendText(res, `📋 Notre ${label} :\n\n${list}\n\nSouhaitez-vous commander ?`);
+                await whatsappClient.sendMessage(msg.from, `📋 Nos ${label} :\n\n${list}\n\nSouhaitez-vous commander ?`);
             }
+            return;
         }
 
         if (quickCmd === "location") {
-            await incrementUsage(cleanNumber);
+            await incrementUsage(clientId);
             const loc = locationText || "Non disponible";
             const link = locationLink ? `\n📍 ${locationLink}` : "";
-            return sendText(res, `📍 Notre adresse :\n${loc}${link}`);
+            await whatsappClient.sendMessage(msg.from, `📍 Notre adresse :\n${loc}${link}`);
+            return;
         }
 
         if (quickCmd === "promo") {
-            await incrementUsage(cleanNumber);
+            await incrementUsage(clientId);
             if (promoActive && promoMessage) {
-                return sendText(res, `🎉 Promotion en cours :\n\n${promoMessage}`);
+                await whatsappClient.sendMessage(msg.from, `🎉 Promotion en cours :\n\n${promoMessage}`);
             } else {
-                return sendText(res, "Aucune promotion active pour le moment. Revenez bientôt ! 😊");
+                await whatsappClient.sendMessage(msg.from, "Aucune promotion active pour le moment. Revenez bientôt ! 😊");
             }
+            return;
         }
 
         // ----------------------------------------------------------
         // OPENAI — messages non reconnus
         // ----------------------------------------------------------
-        const history = await getHistory(cleanNumber);
+        const history = await getHistory(clientId, fromNumber);
         history.push({ role: "user", content: truncate(text) });
 
         const systemPrompt = `
@@ -247,6 +219,11 @@ ${promoActive ? promoMessage : "Aucune promotion en cours"}
 Localisation:
 ${locationText || "Non disponible"}
 ${locationLink || ""}
+Horaires:
+${client.horaires || "Non disponible"}
+Informations supplémentaires:
+${client.infos || "Non disponible"}
+
 
 =========================
 🎯 RÈGLES STRICTES
@@ -254,9 +231,8 @@ ${locationLink || ""}
 - Ne jamais inventer d'information
 - Si une info est absente → dire "non disponible"
 - Si promo active → la mentionner naturellement
-- Si localisation demandée → donner texte ET lien
 - Toujours proposer une action claire à la fin
-- Si le client veut commander → dire poliment qu'une personne va prendre sa commande bientôt
+- Si le client veut commander → dire qu'une personne va prendre sa commande bientôt
 
 =========================
 STYLE
@@ -267,50 +243,174 @@ STYLE
 - Répondre en français sauf si le client écrit dans une autre langue
 `;
 
+        const { default: axios } = await import("axios");
         const response = await axios.post(
             "https://api.openai.com/v1/chat/completions",
             {
                 model: "gpt-4o-mini",
                 max_tokens: 400,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    ...history,
-                ],
+                messages: [{ role: "system", content: systemPrompt }, ...history],
             },
             {
-                headers: {
-                    Authorization: `Bearer ${OPENAI_API_KEY}`,
-                    "Content-Type": "application/json",
-                },
+                headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
                 timeout: 10000,
             }
         );
 
-        const reply =
-            response.data?.choices?.[0]?.message?.content ||
-            "Désolé, je n'ai pas pu traiter votre demande. 😅";
-
+        const reply = response.data?.choices?.[0]?.message?.content || "Désolé, je n'ai pas pu traiter votre demande. 😅";
         history.push({ role: "assistant", content: reply });
-        await saveHistory(cleanNumber, history);
-        await incrementUsage(cleanNumber);
-
-        return sendText(res, reply);
+        await saveHistory(clientId, fromNumber, history);
+        await incrementUsage(clientId);
+        await whatsappClient.sendMessage(msg.from, reply);
 
     } catch (error) {
-        console.error("=== ERREUR DÉTAILLÉE ===");
-        if (error.response) {
-            const status = error.response.status;
-            console.error("Erreur OpenAI:", status, JSON.stringify(error.response.data));
-            if (status === 429) return sendText(res, "⚠️ Service surchargé. Réessayez dans quelques secondes.");
-            if (status === 401) return sendText(res, "⚠️ Erreur de configuration. Contactez le support.");
-        } else if (error.code === "ECONNABORTED") {
-            console.error("Timeout OpenAI");
-            return sendText(res, "⚠️ Réponse trop longue. Réessayez svp.");
-        } else {
-            console.error("Erreur inconnue:", error.message, error.stack);
-        }
-        return sendText(res, "😅 Une erreur est survenue. Réessayez dans un moment.");
+        console.error(`[${clientId}] ERREUR:`, error.message);
     }
+}
+
+// ============================================================
+// CRÉATION D'UNE SESSION WHATSAPP
+// ============================================================
+
+function createSession(clientId) {
+    if (sessions[clientId]) {
+        console.log(`[${clientId}] Session déjà existante`);
+        return;
+    }
+
+    console.log(`[${clientId}] Création de la session...`);
+
+    const client = new Client({
+        authStrategy: new LocalAuth({ clientId }),
+        puppeteer: {
+            headless: true,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ],
+        },
+    });
+
+    sessions[clientId] = { client, status: "initializing", qrCode: null };
+
+    client.on("qr", async (qr) => {
+        console.log(`[${clientId}] QR Code généré`);
+        sessions[clientId].status = "qr_ready";
+        sessions[clientId].qrCode = await qrcode.toDataURL(qr);
+    });
+
+    client.on("ready", async () => {
+        console.log(`[${clientId}] ✅ Bot connecté !`);
+        sessions[clientId].status = "connected";
+        sessions[clientId].qrCode = null;
+
+        // Sauvegarder le statut dans Firebase
+        await db.collection("clients").doc(clientId).set(
+            { botStatus: "connected", connectedAt: new Date() },
+            { merge: true }
+        );
+    });
+
+    client.on("disconnected", async (reason) => {
+        console.log(`[${clientId}] ❌ Déconnecté: ${reason}`);
+        sessions[clientId].status = "disconnected";
+        await db.collection("clients").doc(clientId).set(
+            { botStatus: "disconnected" },
+            { merge: true }
+        );
+    });
+
+    client.on("message", (msg) => {
+        if (!msg.fromMe) handleMessage(clientId, msg);
+    });
+
+    client.initialize();
+}
+
+// ============================================================
+// ROUTES API
+// ============================================================
+
+// Démarrer un nouveau client → génère un QR code
+app.post("/api/client/start", async (req, res) => {
+    const { clientId } = req.body;
+    if (!clientId) return res.status(400).json({ error: "clientId requis" });
+
+    createSession(clientId);
+    res.json({ message: `Session démarrée pour ${clientId}` });
+});
+
+// Page QR code — à partager au client pour qu'il scanne
+app.get("/qr/:clientId", (req, res) => {
+    const { clientId } = req.params;
+    const session = sessions[clientId];
+
+    if (!session) {
+        return res.send(`
+            <html>
+            <head><meta charset="UTF-8"><title>QR Code</title></head>
+            <body style="font-family:sans-serif;text-align:center;padding:40px">
+                <h2>Session non trouvée</h2>
+                <p>Le clientId "${clientId}" n'existe pas encore.</p>
+            </body>
+            </html>
+        `);
+    }
+
+    if (session.status === "connected") {
+        return res.send(`
+            <html>
+            <head><meta charset="UTF-8"><title>Connecté</title></head>
+            <body style="font-family:sans-serif;text-align:center;padding:40px;background:#f0fff4">
+                <h1>✅ Bot connecté !</h1>
+                <p>WhatsApp est bien connecté pour ce compte.</p>
+            </body>
+            </html>
+        `);
+    }
+
+    if (session.qrCode) {
+        return res.send(`
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta http-equiv="refresh" content="30">
+                <title>Scanner le QR Code</title>
+            </head>
+            <body style="font-family:sans-serif;text-align:center;padding:40px;background:#fff">
+                <h2>📱 Scanner ce QR Code avec WhatsApp</h2>
+                <p>Ouvrez WhatsApp → Menu (⋮) → Appareils connectés → Connecter un appareil</p>
+                <img src="${session.qrCode}" style="width:300px;height:300px;border:2px solid #ccc;border-radius:12px"/>
+                <p style="color:#888;font-size:13px">La page se rafraîchit automatiquement toutes les 30 secondes</p>
+            </body>
+            </html>
+        `);
+    }
+
+    return res.send(`
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="refresh" content="5">
+            <title>Chargement...</title>
+        </head>
+        <body style="font-family:sans-serif;text-align:center;padding:40px">
+            <h2>⏳ Initialisation en cours...</h2>
+            <p>La page va se rafraîchir automatiquement.</p>
+        </body>
+        </html>
+    `);
+});
+
+// Statut de tous les clients
+app.get("/api/status", (req, res) => {
+    const status = {};
+    for (const [id, session] of Object.entries(sessions)) {
+        status[id] = session.status;
+    }
+    res.json(status);
 });
 
 // ============================================================
@@ -318,8 +418,19 @@ STYLE
 // ============================================================
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`✅ Bot WhatsApp démarré sur le port ${PORT}`);
-});
+app.listen(PORT, async () => {
+    console.log(`✅ Serveur démarré sur le port ${PORT}`);
+    console.log(`📱 Pour connecter un client: POST /api/client/start { clientId: "restaurant-xyz" }`);
+    console.log(`🔗 Pour voir le QR code: GET /qr/restaurant-xyz`);
 
-module.exports = app;
+    // Reconnexion automatique de tous les clients Firebase
+    try {
+        const snapshot = await db.collection("clients").get();
+        snapshot.forEach(doc => {
+            console.log(`🔄 Reconnexion automatique: ${doc.id}`);
+            createSession(doc.id);
+        });
+    } catch (e) {
+        console.error("Erreur reconnexion automatique:", e.message);
+    }
+});
